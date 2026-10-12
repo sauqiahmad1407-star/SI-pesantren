@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Informasi & Absensi Pesantren</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QR Code Generator & Scanner Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-emerald-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="font-bold text-lg flex items-center gap-2">
+                <span>🕌</span> SI Pesantren
+            </h1>
+            <div id="live-clock" class="text-xs bg-emerald-800 px-3 py-1 rounded-full font-mono">
+                00:00:00
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 mb-20">
+        
+        <!-- ================= VIEW HOME ================= -->
+        <section id="view-home" class="space-y-4">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-6 rounded-2xl shadow-sm">
+                <h2 class="text-xl font-bold mb-1">Selamat Datang di Pesantren</h2>
+                <p class="text-emerald-100 text-sm" id="info-pondok-display">Memuat informasi pondok...</p>
+            </div>
+
+            <!-- Menu Pintasan Cepat -->
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="switchTab('scan')" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center hover:bg-emerald-50 transition">
+                    <span class="text-3xl mb-1">📷</span>
+                    <span class="font-semibold text-sm text-slate-700">Scan Absen</span>
+                </button>
+                <button onclick="switchTab('santri')" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center hover:bg-emerald-50 transition">
+                    <span class="text-3xl mb-1">👥</span>
+                    <span class="font-semibold text-sm text-slate-700">Data Santri</span>
+                </button>
+            </div>
+
+            <!-- Generator QR Code Santri Ringkas -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h3 class="font-semibold text-slate-700 mb-2 text-sm">Cetak / Lihat QR Code Santri</h3>
+                <select id="select-santri-qr" class="w-full p-2 border rounded-lg text-sm mb-3">
+                    <option value="">-- Pilih Santri --</option>
+                </select>
+                <div id="qrcode-container" class="flex justify-center p-3 bg-slate-50 rounded-lg min-h-[160px] items-center">
+                    <span class="text-xs text-slate-400">Pilih santri untuk menampilkan QR Code</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW SANTRI ================= -->
+        <section id="view-santri" class="hidden space-y-4">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700">Daftar Santri</h2>
+                <span id="santri-count" class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-medium">0 Santri</span>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-3 border-b bg-slate-50">
+                    <input type="text" id="search-santri" placeholder="Cari nama santri..." class="w-full p-2 border rounded-lg text-sm bg-white" oninput="filterSantriList()">
+                </div>
+                <div id="santri-list-container" class="divide-y max-h-[60vh] overflow-y-auto">
+                    <!-- Data Santri Dinamis -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW SCAN ABSEN ================= -->
+        <section id="view-scan" class="hidden space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="font-bold text-slate-700 mb-2">Menu Pemindai QR Code</h2>
+                <div class="flex gap-2 mb-4">
+                    <button onclick="setScanMode('cepat')" id="btn-mode-cepat" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white">Scan Cepat Absen</button>
+                    <button onclick="setScanMode('tahfidz')" id="btn-mode-tahfidz" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600">Scan Tahfidz</button>
+                </div>
+
+                <!-- Info Kegiatan Aktif -->
+                <div id="active-activity-banner" class="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                    Kegiatan Aktif: <span id="txt-kegiatan-aktif" class="font-bold">Memuat...</span>
+                </div>
+
+                <!-- Kamera Reader -->
+                <div id="reader" class="overflow-hidden rounded-xl border border-slate-200 bg-black min-h-[250px]"></div>
+                <div id="scan-result-msg" class="mt-3 p-3 text-center text-xs font-medium rounded-lg hidden"></div>
+            </div>
+
+            <!-- Form Khusus Tahfidz (Muncul jika mode tahfidz) -->
+            <div id="tahfidz-form-container" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hidden space-y-3">
+                <h3 class="font-bold text-slate-700 text-sm">Input Setoran Tahfidz</h3>
+                <input type="text" id="tahfidz-santri-nama" readonly placeholder="Scan QR santri terlebih dahulu..." class="w-full p-2 border rounded-lg text-sm bg-slate-50">
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="tahfidz-jenis" class="p-2 border rounded-lg text-sm">
+                        <option value="Ziyadah">Ziyadah (Baru)</option>
+                        <option value="Murojaah">Murojaah (Ulang)</option>
+                        <option value="Tasmi'">Tasmi'</option>
+                    </select>
+                    <input type="text" id="tahfidz-keterangan" placeholder="Misal: Juz 30 / Al-Baqarah" class="p-2 border rounded-lg text-sm">
+                </div>
+                <button onclick="submitTahfidz()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700">Simpan Setoran</button>
+            </div>
+        </section>
+
+        <!-- ================= VIEW PENGURUS ================= -->
+        <section id="view-pengurus" class="hidden space-y-4">
+            <!-- Box Login Pengurus -->
+            <div id="pengurus-login-box" class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 max-w-md mx-auto">
+                <h2 class="font-bold text-slate-700 text-base mb-1">Login Pengurus Pesantren</h2>
+                <p class="text-xs text-slate-500 mb-4">Masukkan kata sandi pengurus untuk mengakses panel admin.</p>
+                <input type="password" id="admin-password" placeholder="Kata sandi..." class="w-full p-2.5 border rounded-lg text-sm mb-3">
+                <button onclick="loginAdmin()" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-700">Masuk Panel</button>
+            </div>
+
+            <!-- Panel Admin Utama (Tersembunyi sebelum login) -->
+            <div id="pengurus-panel-content" class="hidden space-y-4">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                    <h2 class="font-bold text-emerald-700">Panel Pengurus Aktif</h2>
+                    <button onclick="logoutAdmin()" class="text-xs bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg font-medium hover:bg-rose-100">Keluar</button>
+                </div>
+
+                <!-- Pengaturan Kegiatan Aktif Harian -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="font-semibold text-slate-700 text-sm">Pilih 1 Kegiatan Aktif Absensi</h3>
+                    <select id="select-kegiatan-harian" class="w-full p-2 border rounded-lg text-sm">
+                        <option value="Sholat Subuh Berjamaah">Sholat Subuh Berjamaah</option>
+                        <option value="Sholat Dzuhur Berjamaah">Sholat Dzuhur Berjamaah</option>
+                        <option value="Sholat Ashar Berjamaah">Sholat Ashar Berjamaah</option>
+                        <option value="Sholat Maghrib Berjamaah">Sholat Maghrib Berjamaah</option>
+                        <option value="Sholat Isya Berjamaah">Sholat Isya Berjamaah</option>
+                        <option value="Setoran Tahfidz Harian">Setoran Tahfidz Harian</option>
+                        <option value="Kajian Kitab Kuning">Kajian Kitab Kuning</option>
+                    </select>
+                    <button onclick="saveKegiatanAktif()" class="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-semibold">Terapkan Kegiatan Aktif</button>
+                </div>
+
+                <!-- Tambah Santri Baru -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="font-semibold text-slate-700 text-sm">Tambah Santri Baru</h3>
+                    <input type="text" id="input-nama-santri" placeholder="Nama Lengkap Santri" class="w-full p-2 border rounded-lg text-sm">
+                    <input type="text" id="input-kelas-santri" placeholder="Kamar / Kelas (Misal: 1 Ula)" class="w-full p-2 border rounded-lg text-sm">
+                    <button onclick="tambahSantriBaru()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Simpan & Buat QR Code</button>
+                </div>
+
+                <!-- Update Info Pondok -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="font-semibold text-slate-700 text-sm">Perbarui Pengumuman Pondok</h3>
+                    <textarea id="input-info-pondok" rows="2" placeholder="Tulis pengumuman di sini..." class="w-full p-2 border rounded-lg text-sm"></textarea>
+                    <button onclick="updateInfoPondok()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Simpan Pengumuman</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg z-40 max-w-4xl mx-auto">
+        <div class="grid grid-cols-4 text-center py-2">
+            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center text-emerald-600 font-medium text-xs">
+                <span class="text-xl">🏠</span>
+                <span>Home</span>
+            </button>
+            <button onclick="switchTab('santri')" id="nav-santri" class="flex flex-col items-center text-slate-400 font-medium text-xs">
+                <span class="text-xl">👥</span>
+                <span>Santri</span>
+            </button>
+            <button onclick="switchTab('scan')" id="nav-scan" class="flex flex-col items-center text-slate-400 font-medium text-xs">
+                <span class="text-xl">📷</span>
+                <span>Scan Absen</span>
+            </button>
+            <button onclick="switchTab('pengurus')" id="nav-pengurus" class="flex flex-col items-center text-slate-400 font-medium text-xs">
+                <span class="text-xl">⚙️</span>
+                <span>Pengurus</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Script Utama Integrasi Firebase & Aplikasi -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Konfigurasi Firebase Anda yang asli
+        const firebaseConfig = {
+            apiKey: "AIzaSyASLIDDbM0DXVc4bzyld6DhUv7gm1QRf4I",
+            authDomain: "si-pesantren-f670d.firebaseapp.com",
+            projectId: "si-pesantren-f670d",
+            storageBucket: "si-pesantren-f670d.firebasestorage.app",
+            messagingSenderId: "809420174506",
+            appId: "1:809420174506:web:19472a6f63b50a8b0a4cd3",
+            measurementId: "G-RLRHGMFXLL"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Global State & Cache
+        window.santriData = JSON.parse(localStorage.getItem('cache_santri')) || [];
+        window.kegiatanAktif = localStorage.getItem('cache_kegiatan') || 'Sholat Subuh Berjamaah';
+        window.infoPondok = localStorage.getItem('cache_info') || 'Selamat datang di Sistem Informasi Pesantren. Jaga kedisiplinan dan kebersihan lingkungan pondok.';
+        window.scanMode = 'cepat';
+        window.html5QrCode = null;
+        window.scannedSantriForTahfidz = null;
+
+        // Inisialisasi awal saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            updateClock();
+            setInterval(updateClock, 1000);
+            renderInfoPondok();
+            loadInitialData();
+        });
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = now.toLocaleTimeString('id-ID');
+        }
+
+        function renderInfoPondok() {
+            document.getElementById('info-pondok-display').innerText = window.infoPondok;
+            document.getElementById('txt-kegiatan-aktif').innerText = window.kegiatanAktif;
+            document.getElementById('input-info-pondok').value = window.infoPondok;
+            document.getElementById('select-kegiatan-harian').value = window.kegiatanAktif;
+        }
+
+        // Navigasi Tab SPA
+        window.switchTab = function(tabName) {
+            ['home', 'santri', 'scan', 'pengurus'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).className = "flex flex-col items-center text-slate-400 font-medium text-xs";
+            });
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            document.getElementById(`nav-${tabName}`).className = "flex flex-col items-center text-emerald-600 font-medium text-xs";
+
+            // Handler khusus ketika masuk menu scan
+            if (tabName === 'scan') {
+                startScanner();
+            } else {
+                stopScanner();
+            }
+        }
+
+        // Ambil Data Hemat Kuota (Cache First)
+        async function loadInitialData() {
+            if (window.santriData.length === 0) {
+                try {
+                    const querySnapshot = await getDocs(collection(db, "santri"));
+                    window.santriData = [];
+                    querySnapshot.forEach((doc) => {
+                        window.santriData.push({ id: doc.id, ...doc.data() });
+                    });
+                    localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
+                } catch (e) {
+                    console.error("Gagal mengambil data santri:", e);
+                }
+            }
+            populateSantriDropdown();
+            renderSantriList();
+        }
+
+        function populateSantriDropdown() {
+            const select = document.getElementById('select-santri-qr');
+            select.innerHTML = '<option value="">-- Pilih Santri --</option>';
+            window.santriData.forEach(s => {
+                select.innerHTML += `<option value="${s.id}">${s.nama} (${s.kelas || 'Umum'})</option>`;
+            });
+
+            select.onchange = (e) => {
+                const id = e.target.value;
+                const container = document.getElementById('qrcode-container');
+                container.innerHTML = '';
+                if (id) {
+                    new QRCode(container, {
+                        text: id,
+                        width: 140,
+                        height: 140
+                    });
+                } else {
+                    container.innerHTML = '<span class="text-xs text-slate-400">Pilih santri untuk menampilkan QR Code</span>';
+                }
+            };
+        }
+
+        function renderSantriList() {
+            const container = document.getElementById('santri-list-container');
+            document.getElementById('santri-count').innerText = `${window.santriData.length} Santri`;
+            if (window.santriData.length === 0) {
+                container.innerHTML = `<div class="p-6 text-center text-slate-400 text-xs">Belum ada data santri tersimpan.</div>`;
+                return;
+            }
+            container.innerHTML = '';
+            window.santriData.forEach(s => {
+                container.innerHTML += `
+                    <div class="p-3 flex justify-between items-center text-sm">
+                        <div>
+                            <p class="font-semibold text-slate-700">${s.nama}</p>
+                            <p class="text-xs text-slate-400">Kamar/Kelas: ${s.kelas || '-'}</p>
+                        </div>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-mono">${s.id.substring(0,6)}...</span>
+                    </div>
+                `;
+            });
+        }
+
+        window.filterSantriList = function() {
+            const keyword = document.getElementById('search-santri').value.toLowerCase();
+            const filtered = window.santriData.filter(s => s.nama.toLowerCase().includes(keyword));
+            const container = document.getElementById('santri-list-container');
+            container.innerHTML = '';
+            filtered.forEach(s => {
+                container.innerHTML += `
+                    <div class="p-3 flex justify-between items-center text-sm">
+                        <div>
+                            <p class="font-semibold text-slate-700">${s.nama}</p>
+                            <p class="text-xs text-slate-400">Kamar/Kelas: ${s.kelas || '-'}</p>
+                        </div>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-mono">${s.id.substring(0,6)}...</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Mode Scan Handler
+        window.setScanMode = function(mode) {
+            window.scanMode = mode;
+            const btnCepat = document.getElementById('btn-mode-cepat');
+            const btnTahfidz = document.getElementById('btn-mode-tahfidz');
+            const formTahfidz = document.getElementById('tahfidz-form-container');
+
+            if (mode === 'cepat') {
+                btnCepat.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white";
+                btnTahfidz.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600";
+                formTahfidz.classList.add('hidden');
+            } else {
+                btnTahfidz.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white";
+                btnCepat.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600";
+                formTahfidz.classList.remove('hidden');
+            }
+        }
+
+        function startScanner() {
+            if (window.html5QrCode) return;
+            window.html5QrCode = new Html5Qrcode("reader");
+            window.html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 200, height: 200 } },
+                async (decodedText) => {
+                    handleScanSuccess(decodedText);
+                },
+                (errorMessage) => {}
+            ).catch(err => {
+                console.error("Gagal membuka kamera:", err);
+            });
+        }
+
+        function stopScanner() {
+            if (window.html5QrCode) {
+                window.html5QrCode.stop().then(() => {
+                    window.html5QrCode = null;
+                }).catch(err => console.log(err));
+            }
+        }
+
+        async function handleScanSuccess(santriId) {
+            const santri = window.santriData.find(s => s.id === santriId);
+            const msgBox = document.getElementById('scan-result-msg');
+            msgBox.classList.remove('hidden');
+
+            if (!santri) {
+                msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
+                msgBox.innerText = "❌ QR Code tidak dikenali / santri tidak terdaftar!";
+                return;
+            }
+
+            if (window.scanMode === 'cepat') {
+                try {
+                    await addDoc(collection(db, "absensi"), {
+                        santriId: santri.id,
+                        nama: santri.nama,
+                        kegiatan: window.kegiatanAktif,
+                        waktu: new Date().toISOString()
+                    });
+                    msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700";
+                    msgBox.innerText = `✅ Berhasil Absen: ${santri.nama} (${window.kegiatanAktif})`;
+                } catch (e) {
+                    msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
+                    msgBox.innerText = "❌ Gagal menyimpan ke database.";
+                }
+            } else {
+                window.scannedSantriForTahfidz = santri;
+                document.getElementById('tahfidz-santri-nama').value = santri.nama;
+                msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-blue-50 text-blue-700";
+                msgBox.innerText = `📌 Santri dipilih: ${santri.nama}. Silakan isi form setoran di bawah.`;
+            }
+        }
+
+        window.submitTahfidz = async function() {
+            if (!window.scannedSantriForTahfidz) {
+                alert("Silakan scan QR Code santri terlebih dahulu!");
+                return;
+            }
+            const jenis = document.getElementById('tahfidz-jenis').value;
+            const keterangan = document.getElementById('tahfidz-keterangan').value;
+
+            try {
+                await addDoc(collection(db, "tahfidz"), {
+                    santriId: window.scannedSantriForTahfidz.id,
+                    nama: window.scannedSantriForTahfidz.nama,
+                    jenis: jenis,
+                    keterangan: keterangan || '-',
+                    waktu: new Date().toISOString()
+                });
+                alert("Setoran tahfidz berhasil disimpan!");
+                document.getElementById('tahfidz-keterangan').value = '';
+                document.getElementById('tahfidz-santri-nama').value = '';
+                window.scannedSantriForTahfidz = null;
+            } catch (e) {
+                alert("Gagal menyimpan setoran.");
+            }
+        }
+
+        // Panel Pengurus / Admin
+        window.loginAdmin = function() {
+            const pass = document.getElementById('admin-password').value;
+            if (pass === "12345") { // Ganti sandi sesuai keinginan Anda
+                document.getElementById('pengurus-login-box').classList.add('hidden');
+                document.getElementById('pengurus-panel-content').classList.remove('hidden');
+            } else {
+                alert("Kata sandi salah!");
+            }
+        }
+
+        window.logoutAdmin = function() {
+            document.getElementById('pengurus-login-box').classList.remove('hidden');
+            document.getElementById('pengurus-panel-content').classList.add('hidden');
+            document.getElementById('admin-password').value = '';
+        }
+
+        window.saveKegiatanAktif = function() {
+            window.kegiatanAktif = document.getElementById('select-kegiatan-harian').value;
+            localStorage.setItem('cache_kegiatan', window.kegiatanAktif);
+            renderInfoPondok();
+            alert("Kegiatan aktif berhasil diperbarui!");
+        }
+
+        window.tambahSantriBaru = async function() {
+            const nama = document.getElementById('input-nama-santri').value.trim();
+            const kelas = document.getElementById('input-kelas-santri').value.trim();
+
+            if (!nama) {
+                alert("Nama santri wajib diisi!");
+                return;
+            }
+
+            try {
+                const docRef = await addDoc(collection(db, "santri"), { nama, kelas });
+                window.santriData.push({ id: docRef.id, nama, kelas });
+                localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
+                populateSantriDropdown();
+                renderSantriList();
+                document.getElementById('input-nama-santri').value = '';
+                document.getElementById('input-kelas-santri').value = '';
+                alert("Santri berhasil ditambahkan!");
+            } catch (e) {
+                alert("Gagal menambahkan santri.");
+            }
+        }
+
+        window.updateInfoPondok = function() {
+            window.infoPondok = document.getElementById('input-info-pondok').value;
+            localStorage.setItem('cache_info', window.infoPondok);
+            renderInfoPondok();
+            alert("Pengumuman pondok diperbarui!");
+        }
+    </script>
+</body>
+</html>
