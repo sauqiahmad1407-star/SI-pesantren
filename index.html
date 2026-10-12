@@ -77,21 +77,36 @@
 
         <!-- ================= VIEW SCAN ABSEN ================= -->
         <section id="view-scan" class="hidden space-y-4">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                <h2 class="font-bold text-slate-700 mb-2">Menu Pemindai QR Code</h2>
-                <div class="flex gap-2 mb-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                <h2 class="font-bold text-slate-700">Menu Pemindai QR Code</h2>
+                <div class="flex gap-2">
                     <button onclick="setScanMode('cepat')" id="btn-mode-cepat" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-600 text-white">Scan Cepat Absen</button>
                     <button onclick="setScanMode('tahfidz')" id="btn-mode-tahfidz" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600">Scan Tahfidz</button>
                 </div>
 
                 <!-- Info Kegiatan Aktif -->
-                <div id="active-activity-banner" class="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <div id="active-activity-banner" class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                     Kegiatan Aktif: <span id="txt-kegiatan-aktif" class="font-bold">Memuat...</span>
                 </div>
 
-                <!-- Kamera Reader -->
-                <div id="reader" class="overflow-hidden rounded-xl border border-slate-200 bg-black min-h-[250px]"></div>
-                <div id="scan-result-msg" class="mt-3 p-3 text-center text-xs font-medium rounded-lg hidden"></div>
+                <!-- Kontrol Pilihan Kamera & Tombol Start/Stop -->
+                <div class="flex flex-col sm:flex-row gap-2 items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div class="w-full sm:w-auto flex-1">
+                        <label class="block text-[10px] text-slate-500 mb-1 font-semibold">PILIH KAMERA:</label>
+                        <select id="camera-select" class="w-full p-1.5 border rounded-lg text-xs bg-white">
+                            <option value="environment">Kamera Belakang (Utama)</option>
+                            <option value="user">Kamera Depan</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                        <button onclick="startScanner()" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition">Aktifkan Kamera</button>
+                        <button onclick="stopScanner()" class="flex-1 sm:flex-none bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2 rounded-lg text-xs font-semibold transition">Matikan</button>
+                    </div>
+                </div>
+
+                <!-- Kamera Reader Box -->
+                <div id="reader" class="overflow-hidden rounded-xl border border-slate-200 bg-slate-900 min-h-[220px]"></div>
+                <div id="scan-result-msg" class="p-3 text-center text-xs font-medium rounded-lg hidden"></div>
             </div>
 
             <!-- Form Khusus Tahfidz (Muncul jika mode tahfidz) -->
@@ -120,7 +135,7 @@
                 <button onclick="loginAdmin()" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-700">Masuk Panel</button>
             </div>
 
-            <!-- Panel Admin Utama (Tersembunyi sebelum login) -->
+            <!-- Panel Admin Utama -->
             <div id="pengurus-panel-content" class="hidden space-y-4">
                 <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                     <h2 class="font-bold text-emerald-700">Panel Pengurus Aktif</h2>
@@ -182,12 +197,11 @@
         </div>
     </nav>
 
-    <!-- Script Utama Integrasi Firebase & Aplikasi -->
+    <!-- Script Utama -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Konfigurasi Firebase Anda yang asli
         const firebaseConfig = {
             apiKey: "AIzaSyASLIDDbM0DXVc4bzyld6DhUv7gm1QRf4I",
             authDomain: "si-pesantren-f670d.firebaseapp.com",
@@ -201,15 +215,13 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Global State & Cache
         window.santriData = JSON.parse(localStorage.getItem('cache_santri')) || [];
         window.kegiatanAktif = localStorage.getItem('cache_kegiatan') || 'Sholat Subuh Berjamaah';
-        window.infoPondok = localStorage.getItem('cache_info') || 'Selamat datang di Sistem Informasi Pesantren. Jaga kedisiplinan dan kebersihan lingkungan pondok.';
+        window.infoPondok = localStorage.getItem('cache_info') || 'Selamat datang di Sistem Informasi Pesantren.';
         window.scanMode = 'cepat';
         window.html5QrCode = null;
         window.scannedSantriForTahfidz = null;
 
-        // Inisialisasi awal saat halaman dimuat
         document.addEventListener('DOMContentLoaded', () => {
             updateClock();
             setInterval(updateClock, 1000);
@@ -229,7 +241,6 @@
             document.getElementById('select-kegiatan-harian').value = window.kegiatanAktif;
         }
 
-        // Navigasi Tab SPA
         window.switchTab = function(tabName) {
             ['home', 'santri', 'scan', 'pengurus'].forEach(t => {
                 document.getElementById(`view-${t}`).classList.add('hidden');
@@ -238,15 +249,12 @@
             document.getElementById(`view-${tabName}`).classList.remove('hidden');
             document.getElementById(`nav-${tabName}`).className = "flex flex-col items-center text-emerald-600 font-medium text-xs";
 
-            // Handler khusus ketika masuk menu scan
-            if (tabName === 'scan') {
-                startScanner();
-            } else {
+            // Jika pindah dari menu scan, kamera otomatis dimatikan agar hemat baterai/kuota
+            if (tabName !== 'scan') {
                 stopScanner();
             }
         }
 
-        // Ambil Data Hemat Kuota (Cache First)
         async function loadInitialData() {
             if (window.santriData.length === 0) {
                 try {
@@ -276,11 +284,7 @@
                 const container = document.getElementById('qrcode-container');
                 container.innerHTML = '';
                 if (id) {
-                    new QRCode(container, {
-                        text: id,
-                        width: 140,
-                        height: 140
-                    });
+                    new QRCode(container, { text: id, width: 140, height: 140 });
                 } else {
                     container.innerHTML = '<span class="text-xs text-slate-400">Pilih santri untuk menampilkan QR Code</span>';
                 }
@@ -326,7 +330,6 @@
             });
         }
 
-        // Mode Scan Handler
         window.setScanMode = function(mode) {
             window.scanMode = mode;
             const btnCepat = document.getElementById('btn-mode-cepat');
@@ -344,26 +347,39 @@
             }
         }
 
-        function startScanner() {
-            if (window.html5QrCode) return;
+        // Kontrol Kamera Manual (Start & Stop)
+        window.startScanner = async function() {
+            if (window.html5QrCode) {
+                await stopScanner();
+            }
+            
+            const selectedCamera = document.getElementById('camera-select').value;
             window.html5QrCode = new Html5Qrcode("reader");
+            
             window.html5QrCode.start(
-                { facingMode: "environment" },
+                { facingMode: selectedCamera },
                 { fps: 10, qrbox: { width: 200, height: 200 } },
                 async (decodedText) => {
                     handleScanSuccess(decodedText);
                 },
                 (errorMessage) => {}
             ).catch(err => {
+                alert("Tidak dapat mengakses kamera. Pastikan izin kamera diizinkan pada browser Anda.");
                 console.error("Gagal membuka kamera:", err);
             });
         }
 
-        function stopScanner() {
+        window.stopScanner = async function() {
             if (window.html5QrCode) {
-                window.html5QrCode.stop().then(() => {
-                    window.html5QrCode = null;
-                }).catch(err => console.log(err));
+                try {
+                    if (window.html5QrCode.isScanning) {
+                        await window.html5QrCode.stop();
+                    }
+                    window.html5QrCode.clear();
+                } catch (err) {
+                    console.log("Catatan stop scanner:", err);
+                }
+                window.html5QrCode = null;
             }
         }
 
@@ -373,7 +389,7 @@
             msgBox.classList.remove('hidden');
 
             if (!santri) {
-                msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
+                msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
                 msgBox.innerText = "❌ QR Code tidak dikenali / santri tidak terdaftar!";
                 return;
             }
@@ -386,16 +402,16 @@
                         kegiatan: window.kegiatanAktif,
                         waktu: new Date().toISOString()
                     });
-                    msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700";
+                    msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700";
                     msgBox.innerText = `✅ Berhasil Absen: ${santri.nama} (${window.kegiatanAktif})`;
                 } catch (e) {
-                    msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
+                    msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
                     msgBox.innerText = "❌ Gagal menyimpan ke database.";
                 }
             } else {
                 window.scannedSantriForTahfidz = santri;
                 document.getElementById('tahfidz-santri-nama').value = santri.nama;
-                msgBox.className = "mt-3 p-3 text-center text-xs font-medium rounded-lg bg-blue-50 text-blue-700";
+                msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-blue-50 text-blue-700";
                 msgBox.innerText = `📌 Santri dipilih: ${santri.nama}. Silakan isi form setoran di bawah.`;
             }
         }
@@ -425,10 +441,9 @@
             }
         }
 
-        // Panel Pengurus / Admin
         window.loginAdmin = function() {
             const pass = document.getElementById('admin-password').value;
-            if (pass === "12345") { // Ganti sandi sesuai keinginan Anda
+            if (pass === "12345") {
                 document.getElementById('pengurus-login-box').classList.add('hidden');
                 document.getElementById('pengurus-panel-content').classList.remove('hidden');
             } else {
