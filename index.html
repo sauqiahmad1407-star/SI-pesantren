@@ -196,12 +196,17 @@
                     <h3 class="font-semibold text-slate-700 text-sm">Pilih 1 Kegiatan Aktif Absensi</h3>
                     <select id="select-kegiatan-harian" class="w-full p-2 border rounded-lg text-sm">
                         <option value="Sholat Subuh Berjamaah">Sholat Subuh Berjamaah</option>
+                        <option value="Sholat Sunnah Qobliyah Subuh">Sholat Sunnah Qobliyah Subuh</option>
                         <option value="Sholat Dzuhur Berjamaah">Sholat Dzuhur Berjamaah</option>
+                        <option value="Sholat Sunnah Qobliyah Dzuhur">Sholat Sunnah Qobliyah Dzuhur</option>
+                        <option value="Sholat Sunnah Ba'diyah Dzuhur">Sholat Sunnah Ba'diyah Dzuhur</option>
                         <option value="Sholat Ashar Berjamaah">Sholat Ashar Berjamaah</option>
                         <option value="Sholat Maghrib Berjamaah">Sholat Maghrib Berjamaah</option>
+                        <option value="Sholat Sunnah Ba'diyah Maghrib">Sholat Sunnah Ba'diyah Maghrib</option>
                         <option value="Sholat Isya Berjamaah">Sholat Isya Berjamaah</option>
-                        <option value="Setoran Tahfidz Harian">Setoran Tahfidz Harian</option>
-                        <option value="Kajian Kitab Kuning">Kajian Kitab Kuning</option>
+                        <option value="Sholat Sunnah Ba'diyah Isya">Sholat Sunnah Ba'diyah Isya</option>
+                        <option value="Puasa Sunnah">Puasa Sunnah</option>
+                        <option value="Kajian/Ta'lim">Kajian/Ta'lim</option>
                     </select>
                     <button onclick="saveKegiatanAktif()" class="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-semibold">Terapkan Kegiatan Aktif</button>
                 </div>
@@ -211,6 +216,14 @@
                     <input type="text" id="input-nama-santri" placeholder="Nama Lengkap Santri" class="w-full p-2 border rounded-lg text-sm">
                     <input type="text" id="input-kelas-santri" placeholder="Kamar / Kelas (Misal: 1 Ula)" class="w-full p-2 border rounded-lg text-sm">
                     <button onclick="tambahSantriBaru()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Simpan & Buat QR Code</button>
+                </div>
+
+                <!-- Manajemen Hapus Santri -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="font-semibold text-slate-700 text-sm">Daftar Santri & Kelola Hapus</h3>
+                    <div id="admin-santri-list" class="divide-y max-h-60 overflow-y-auto border rounded-lg p-2 bg-slate-50 text-xs">
+                        <!-- List santri dengan tombol hapus -->
+                    </div>
                 </div>
 
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
@@ -247,7 +260,7 @@
     <!-- Script Utama -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyASLIDDbM0DXVc4bzyld6DhUv7gm1QRf4I",
@@ -316,6 +329,7 @@
             }
             populateSantriDropdown();
             renderSantriList();
+            renderAdminSantriList();
         }
 
         function populateSantriDropdown() {
@@ -356,6 +370,42 @@
                     </div>
                 `;
             });
+        }
+
+        function renderAdminSantriList() {
+            const container = document.getElementById('admin-santri-list');
+            if (!container) return;
+            if (window.santriData.length === 0) {
+                container.innerHTML = `<div class="p-3 text-center text-slate-400">Belum ada santri.</div>`;
+                return;
+            }
+            container.innerHTML = '';
+            window.santriData.forEach(s => {
+                container.innerHTML += `
+                    <div class="flex justify-between items-center p-2 bg-white rounded mb-1 border">
+                        <div>
+                            <p class="font-semibold text-slate-700">${s.nama}</p>
+                            <p class="text-[10px] text-slate-400">Kelas: ${s.kelas || '-'}</p>
+                        </div>
+                        <button onclick="hapusSantri('${s.id}')" class="bg-rose-50 text-rose-600 hover:bg-rose-100 px-2.5 py-1 rounded text-xs font-semibold">Hapus</button>
+                    </div>
+                `;
+            });
+        }
+
+        window.hapusSantri = async function(santriId) {
+            if (!confirm("Apakah Anda yakin ingin menghapus santri ini?")) return;
+            try {
+                await deleteDoc(doc(db, "santri", santriId));
+                window.santriData = window.santriData.filter(s => s.id !== santriId);
+                localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
+                populateSantriDropdown();
+                renderSantriList();
+                renderAdminSantriList();
+                alert("Santri berhasil dihapus dari database!");
+            } catch (e) {
+                alert("Gagal menghapus santri.");
+            }
         }
 
         window.filterSantriList = function() {
@@ -520,7 +570,6 @@
             }
         }
 
-        // Handler Scan dengan Validasi Cegah Double Absen di Hari & Kegiatan yang Sama
         async function handleScanSuccess(santriId) {
             const santri = window.santriData.find(s => s.id === santriId);
             const msgBox = document.getElementById('scan-result-msg');
@@ -534,7 +583,7 @@
 
             if (window.scanMode === 'cepat') {
                 try {
-                    const todayStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                    const todayStr = new Date().toISOString().split('T')[0];
                     const absensiSnapshot = await getDocs(collection(db, "absensi"));
                     let sudahAbsen = false;
 
@@ -630,7 +679,7 @@
         window.logoutAdmin = function() {
             document.getElementById('pengurus-login-box').classList.remove('hidden');
             document.getElementById('pengurus-panel-content').classList.add('hidden');
-            document.getElementById('admin-password-value')?.value;
+            document.getElementById('admin-password').value = '';
         }
 
         window.saveKegiatanAktif = function() {
@@ -653,6 +702,7 @@
                 localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
                 populateSantriDropdown();
                 renderSantriList();
+                renderAdminSantriList();
                 document.getElementById('input-nama-santri').value = '';
                 document.getElementById('input-kelas-santri').value = '';
                 alert("Santri berhasil ditambahkan!");
