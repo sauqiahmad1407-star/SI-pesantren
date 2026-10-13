@@ -45,12 +45,13 @@
                 </button>
             </div>
 
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                <h3 class="font-semibold text-slate-700 mb-2 text-sm">Cetak / Lihat QR Code Santri</h3>
-                <select id="select-santri-qr" class="w-full p-2 border rounded-lg text-sm mb-3">
+            <!-- Generator & Download QR Code Santri -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                <h3 class="font-semibold text-slate-700 text-sm">Cetak / Unduh QR Code Santri</h3>
+                <select id="select-santri-qr" class="w-full p-2 border rounded-lg text-sm bg-white">
                     <option value="">-- Pilih Santri --</option>
                 </select>
-                <div id="qrcode-container" class="flex justify-center p-3 bg-slate-50 rounded-lg min-h-[160px] items-center">
+                <div id="qrcode-container" class="flex flex-col justify-center items-center p-4 bg-slate-50 rounded-lg min-h-[180px] space-y-3">
                     <span class="text-xs text-slate-400">Pilih santri untuk menampilkan QR Code</span>
                 </div>
             </div>
@@ -79,7 +80,6 @@
                     <button onclick="closeSantriDetail()" class="text-xs text-slate-400 hover:text-slate-600 font-bold">✕ Tutup</button>
                 </div>
                 
-                <!-- Filter Pilihan Hari -->
                 <div class="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border text-xs">
                     <span class="font-semibold text-slate-600">Filter Riwayat:</span>
                     <button onclick="filterRiwayatHari('hari_ini')" id="btn-filter-hariini" class="px-3 py-1 rounded bg-emerald-600 text-white font-medium">Hari Ini</button>
@@ -287,8 +287,6 @@
         window.scanMode = 'cepat';
         window.html5QrCode = null;
         window.scannedSantriForTahfidz = null;
-        
-        // State sementara untuk riwayat santri aktif
         window.currentSelectedSantri = { id: null, nama: null };
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -350,14 +348,65 @@
 
             select.onchange = (e) => {
                 const id = e.target.value;
+                const santriObj = window.santriData.find(s => s.id === id);
                 const container = document.getElementById('qrcode-container');
                 container.innerHTML = '';
-                if (id) {
-                    new QRCode(container, { text: id, width: 140, height: 140 });
+                
+                if (id && santriObj) {
+                    // Buat wadah QR
+                    const qrDiv = document.createElement('div');
+                    qrDiv.id = "qrcode-render-box";
+                    container.appendChild(qrDiv);
+
+                    new QRCode(qrDiv, { 
+                        text: id, 
+                        width: 140, 
+                        height: 140 
+                    });
+
+                    // Tambahkan teks nama santri & Tombol Download
+                    const namaP = document.createElement('p');
+                    namaP.className = "text-xs font-bold text-slate-700 mt-1";
+                    namaP.innerText = santriObj.nama;
+                    container.appendChild(namaP);
+
+                    const btnDownload = document.createElement('button');
+                    btnDownload.className = "mt-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition";
+                    btnDownload.innerText = "📥 Unduh QR Code";
+                    btnDownload.onclick = () => downloadQRCode(santriObj.nama);
+                    container.appendChild(btnDownload);
                 } else {
                     container.innerHTML = '<span class="text-xs text-slate-400">Pilih santri untuk menampilkan QR Code</span>';
                 }
             };
+        }
+
+        // Fungsi Download Gambar QR Code
+        window.downloadQRCode = function(namaSantri) {
+            const qrBox = document.getElementById('qrcode-render-box');
+            if (!qrBox) return;
+            const img = qrBox.querySelector('img');
+            const canvas = qrBox.querySelector('canvas');
+
+            let imageURL = "";
+            if (img && img.src) {
+                imageURL = img.src;
+            } else if (canvas) {
+                imageURL = canvas.toDataURL("image/png");
+            }
+
+            if (!imageURL) {
+                alert("QR Code belum siap diunduh.");
+                return;
+            }
+
+            const cleanName = namaSantri.replace(/[^a-zA-Z0-9]/g, '_');
+            const link = document.createElement('a');
+            link.href = imageURL;
+            link.download = `QR_Code_${cleanName}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function renderSantriList() {
@@ -435,18 +484,13 @@
             });
         }
 
-        // Fungsi Membuka Detail Santri (Default: Hari Ini)
         window.openSantriDetail = async function(santriId, santriNama) {
             window.currentSelectedSantri = { id: santriId, nama: santriNama };
-            
-            // Set tombol filter default ke "Hari Ini"
             document.getElementById('btn-filter-hariini').className = "px-3 py-1 rounded bg-emerald-600 text-white font-medium";
             document.getElementById('btn-filter-7hari').className = "px-3 py-1 rounded bg-white text-slate-600 border font-medium";
-
             loadRiwayatData('hari_ini');
         }
 
-        // Handler Filter Hari (Hari Ini / 7 Hari Terakhir)
         window.filterRiwayatHari = function(tipe) {
             const btnHariIni = document.getElementById('btn-filter-hariini');
             const btn7Hari = document.getElementById('btn-filter-7hari');
@@ -458,7 +502,6 @@
                 btn7Hari.className = "px-3 py-1 rounded bg-emerald-600 text-white font-medium";
                 btnHariIni.className = "px-3 py-1 rounded bg-white text-slate-600 border font-medium";
             }
-
             loadRiwayatData(tipe);
         }
 
@@ -482,8 +525,6 @@
             box.scrollIntoView({ behavior: 'smooth' });
 
             const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
-            
             const limitDate = new Date();
             if (tipeFilter === 'hari_ini') {
                 limitDate.setHours(0, 0, 0, 0);
@@ -495,14 +536,12 @@
             threeMonthsAgo.setMonth(now.getMonth() - 3);
 
             try {
-                // 1. Ambil data Absensi & Setoran Harian sesuai filter waktu
                 const absensiSnapshot = await getDocs(collection(db, "absensi"));
                 const tahfidzSnapshot = await getDocs(collection(db, "tahfidz_detail"));
 
                 let riwayatListHTML = "";
                 let countData = 0;
 
-                // Proses data Absensi
                 absensiSnapshot.forEach((doc) => {
                     const data = doc.data();
                     if (data.santriId === santriId) {
@@ -520,7 +559,6 @@
                     }
                 });
 
-                // Proses data Setoran Harian (Ziyadah/Murojaah)
                 tahfidzSnapshot.forEach((doc) => {
                     const data = doc.data();
                     if (data.santriId === santriId) {
@@ -540,7 +578,6 @@
 
                 absensiContainer.innerHTML = countData === 0 ? `<span class="text-slate-400 italic">Tidak ada catatan aktivitas untuk periode ini.</span>` : riwayatListHTML;
 
-                // 2. Ambil data Rekap Ujian Tasmi' (Selalu merujuk 3 bulan terakhir untuk sertifikat triwulan)
                 let totalUjianTasmi = 0;
                 let totalNilaiTasmi = 0;
                 let suratTasmiSetor = new Set();
