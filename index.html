@@ -353,7 +353,6 @@
                 container.innerHTML = '';
                 
                 if (id && santriObj) {
-                    // Buat wadah QR
                     const qrDiv = document.createElement('div');
                     qrDiv.id = "qrcode-render-box";
                     container.appendChild(qrDiv);
@@ -364,7 +363,6 @@
                         height: 140 
                     });
 
-                    // Tambahkan teks nama santri & Tombol Download
                     const namaP = document.createElement('p');
                     namaP.className = "text-xs font-bold text-slate-700 mt-1";
                     namaP.innerText = santriObj.nama;
@@ -381,7 +379,6 @@
             };
         }
 
-        // Fungsi Download Gambar QR Code
         window.downloadQRCode = function(namaSantri) {
             const qrBox = document.getElementById('qrcode-render-box');
             if (!qrBox) return;
@@ -669,6 +666,7 @@
             }
         }
 
+        // Handler Scan dengan Validasi Cepat Anti-Double Absen via localStorage (Sangat Hemat Firebase)
         async function handleScanSuccess(santriId) {
             const santri = window.santriData.find(s => s.id === santriId);
             const msgBox = document.getElementById('scan-result-msg');
@@ -681,33 +679,24 @@
             }
 
             if (window.scanMode === 'cepat') {
+                const todayStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                const cacheKey = `absen_${santri.id}_${window.kegiatanAktif}_${todayStr}`;
+
+                if (localStorage.getItem(cacheKey)) {
+                    msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-amber-50 text-amber-800 border border-amber-200";
+                    msgBox.innerText = `⚠️ Peringatan: ${santri.nama} sudah melakukan absen untuk kegiatan "${window.kegiatanAktif}" hari ini!`;
+                    return;
+                }
+
                 try {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const absensiSnapshot = await getDocs(collection(db, "absensi"));
-                    let sudahAbsen = false;
-
-                    absensiSnapshot.forEach((doc) => {
-                        const data = doc.data();
-                        if (data.santriId === santri.id && data.kegiatan === window.kegiatanAktif) {
-                            const tglAbsen = data.waktu ? data.waktu.split('T')[0] : '';
-                            if (tglAbsen === todayStr) {
-                                sudahAbsen = true;
-                            }
-                        }
-                    });
-
-                    if (sudahAbsen) {
-                        msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-amber-50 text-amber-800 border border-amber-200";
-                        msgBox.innerText = `⚠️ Peringatan: ${santri.nama} sudah melakukan absen untuk kegiatan "${window.kegiatanAktif}" hari ini!`;
-                        return;
-                    }
-
                     await addDoc(collection(db, "absensi"), {
                         santriId: santri.id,
                         nama: santri.nama,
                         kegiatan: window.kegiatanAktif,
                         waktu: new Date().toISOString()
                     });
+
+                    localStorage.setItem(cacheKey, "true");
 
                     msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200";
                     msgBox.innerText = `✅ Anda berhasil absen: ${santri.nama} (${window.kegiatanAktif})`;
@@ -785,7 +774,7 @@
             window.kegiatanAktif = document.getElementById('select-kegiatan-harian').value;
             localStorage.setItem('cache_kegiatan', window.kegiatanAktif);
             renderInfoPondok();
-            alert("Kegiatan aktif diperbarui!");
+            alert("Kegiatan aktif berhasil diperbarui!");
         }
 
         window.tambahSantriBaru = async function() {
