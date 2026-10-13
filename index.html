@@ -45,7 +45,6 @@
                 </button>
             </div>
 
-            <!-- Generator & Download QR Code Santri -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
                 <h3 class="font-semibold text-slate-700 text-sm">Cetak / Unduh QR Code Santri</h3>
                 <select id="select-santri-qr" class="w-full p-2 border rounded-lg text-sm bg-white">
@@ -266,7 +265,7 @@
     <!-- Script Utama -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, setDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyASLIDDbM0DXVc4bzyld6DhUv7gm1QRf4I",
@@ -288,6 +287,7 @@
         window.html5QrCode = null;
         window.scannedSantriForTahfidz = null;
         window.currentSelectedSantri = { id: null, nama: null };
+        window.isScanningLocked = false; // Pengunci jeda scan anti-dobel kilat
 
         document.addEventListener('DOMContentLoaded', () => {
             updateClock();
@@ -666,8 +666,10 @@
             }
         }
 
-        // Handler Scan dengan Validasi Cepat Anti-Double Absen via localStorage (Sangat Hemat Firebase)
+        // Handler Scan dengan Proteksi Ganda (localStorage + Unique Document ID Firestore)
         async function handleScanSuccess(santriId) {
+            if (window.isScanningLocked) return; // Kunci sementara cegah double kilat
+
             const santri = window.santriData.find(s => s.id === santriId);
             const msgBox = document.getElementById('scan-result-msg');
             msgBox.classList.remove('hidden');
@@ -679,17 +681,23 @@
             }
 
             if (window.scanMode === 'cepat') {
+                window.isScanningLocked = true; // Aktifkan kunci
                 const todayStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
                 const cacheKey = `absen_${santri.id}_${window.kegiatanAktif}_${todayStr}`;
 
                 if (localStorage.getItem(cacheKey)) {
                     msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-amber-50 text-amber-800 border border-amber-200";
                     msgBox.innerText = `⚠️ Peringatan: ${santri.nama} sudah melakukan absen untuk kegiatan "${window.kegiatanAktif}" hari ini!`;
+                    setTimeout(() => { window.isScanningLocked = false; }, 2000); // Buka kunci setelah 2 detik
                     return;
                 }
 
                 try {
-                    await addDoc(collection(db, "absensi"), {
+                    // Buat ID Dokumen unik berbasis ID Santri + Kegiatan + Tanggal (Anti-Dobel di Database)
+                    const safeKegiatan = window.kegiatanAktif.replace(/[^a-zA-Z0-9]/g, '_');
+                    const uniqueDocId = `${santri.id}_${safeKegiatan}_${todayStr}`;
+
+                    await setDoc(doc(db, "absensi", uniqueDocId), {
                         santriId: santri.id,
                         nama: santri.nama,
                         kegiatan: window.kegiatanAktif,
@@ -704,6 +712,8 @@
                     msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
                     msgBox.innerText = "❌ Gagal menyimpan absen ke database.";
                 }
+
+                setTimeout(() => { window.isScanningLocked = false; }, 2000); // Buka kunci setelah proses selesai
             } else {
                 window.scannedSantriForTahfidz = santri;
                 document.getElementById('tahfidz-santri-nama').value = santri.nama;
