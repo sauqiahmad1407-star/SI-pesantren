@@ -64,8 +64,9 @@
             </div>
             
             <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="p-3 border-b bg-slate-50">
+                <div class="p-3 border-b bg-slate-50 flex justify-between items-center gap-2">
                     <input type="text" id="search-santri" placeholder="Cari nama santri..." class="w-full p-2 border rounded-lg text-sm bg-white" oninput="filterSantriList()">
+                    <button onclick="loadInitialData()" class="bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap">🔄 Refresh</button>
                 </div>
                 <div id="santri-list-container" class="divide-y max-h-[60vh] overflow-y-auto">
                     <!-- Data Santri Dinamis -->
@@ -221,7 +222,7 @@
                     <h3 class="font-semibold text-slate-700 text-sm">Tambah Santri Baru</h3>
                     <input type="text" id="input-nama-santri" placeholder="Nama Lengkap Santri" class="w-full p-2 border rounded-lg text-sm">
                     <input type="text" id="input-kelas-santri" placeholder="Kamar / Kelas (Misal: 1 Ula)" class="w-full p-2 border rounded-lg text-sm">
-                    <button onclick="tambahSantriBaru()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Simpan & Buat QR Code</button>
+                    <button onclick="tambahSantriBaru()" class="w-full bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700">Simpan & Buat QR Code</button>
                 </div>
 
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
@@ -265,7 +266,7 @@
     <!-- Script Utama -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, setDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, addDoc, setDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyASLIDDbM0DXVc4bzyld6DhUv7gm1QRf4I",
@@ -280,14 +281,14 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        window.santriData = JSON.parse(localStorage.getItem('cache_santri')) || [];
+        window.santriData = [];
         window.kegiatanAktif = localStorage.getItem('cache_kegiatan') || 'Sholat Subuh Berjamaah';
         window.infoPondok = localStorage.getItem('cache_info') || 'Selamat datang di Sistem Informasi Pesantren.';
         window.scanMode = 'cepat';
         window.html5QrCode = null;
         window.scannedSantriForTahfidz = null;
         window.currentSelectedSantri = { id: null, nama: null };
-        window.isScanningLocked = false; // Pengunci jeda scan anti-dobel kilat
+        window.isScanningLocked = false;
 
         document.addEventListener('DOMContentLoaded', () => {
             updateClock();
@@ -319,24 +320,32 @@
             if (tabName !== 'scan') {
                 stopScanner();
             }
+            // Jika membuka tab santri, tarik data online terbaru dari Firebase
+            if (tabName === 'santri') {
+                loadInitialData();
+            }
         }
 
-        async function loadInitialData() {
-            if (window.santriData.length === 0) {
-                try {
-                    const querySnapshot = await getDocs(collection(db, "santri"));
-                    window.santriData = [];
-                    querySnapshot.forEach((doc) => {
-                        window.santriData.push({ id: doc.id, ...doc.data() });
-                    });
-                    localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
-                } catch (e) {
-                    console.error("Gagal mengambil data santri:", e);
-                }
+        // Fungsi Utama: Ambil Data Santri Langsung dari Firebase secara Online
+        window.loadInitialData = async function() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "santri"));
+                window.santriData = [];
+                querySnapshot.forEach((doc) => {
+                    window.santriData.push({ id: doc.id, ...doc.data() });
+                });
+                
+                populateSantriDropdown();
+                renderSantriList();
+                renderAdminSantriList();
+            } catch (e) {
+                console.error("Gagal mengambil data santri online:", e);
+                // Fallback ke cache jika offline
+                window.santriData = JSON.parse(localStorage.getItem('cache_santri')) || [];
+                populateSantriDropdown();
+                renderSantriList();
+                renderAdminSantriList();
             }
-            populateSantriDropdown();
-            renderSantriList();
-            renderAdminSantriList();
         }
 
         function populateSantriDropdown() {
@@ -410,7 +419,7 @@
             const container = document.getElementById('santri-list-container');
             document.getElementById('santri-count').innerText = `${window.santriData.length} Santri`;
             if (window.santriData.length === 0) {
-                container.innerHTML = `<div class="p-6 text-center text-slate-400 text-xs">Belum ada data santri tersimpan.</div>`;
+                container.innerHTML = `<div class="p-6 text-center text-slate-400 text-xs">Belum ada data santri di server online.</div>`;
                 return;
             }
             container.innerHTML = '';
@@ -449,15 +458,14 @@
         }
 
         window.hapusSantri = async function(santriId) {
-            if (!confirm("Apakah Anda yakin ingin menghapus santri ini?")) return;
+            if (!confirm("Apakah Anda yakin ingin menghapus santri ini dari server online?")) return;
             try {
                 await deleteDoc(doc(db, "santri", santriId));
                 window.santriData = window.santriData.filter(s => s.id !== santriId);
-                localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
                 populateSantriDropdown();
                 renderSantriList();
                 renderAdminSantriList();
-                alert("Santri berhasil dihapus dari database!");
+                alert("Santri berhasil dihapus dari database online!");
             } catch (e) {
                 alert("Gagal menghapus santri.");
             }
@@ -517,8 +525,8 @@
             title.innerText = `Profil & Riwayat: ${santriNama}`;
             labelTitle.innerText = tipeFilter === 'hari_ini' ? `📌 Riwayat Absensi & Setoran (Hari Ini)` : `📌 Riwayat Absensi & Setoran (7 Hari Terakhir)`;
             
-            absensiContainer.innerHTML = `<span class="text-slate-400 italic">Memuat data riwayat...</span>`;
-            tasmiContainer.innerHTML = `<span class="text-slate-400 italic">Memuat rekap tasmi' 3 bulan terakhir...</span>`;
+            absensiContainer.innerHTML = `<span class="text-slate-400 italic">Memuat data riwayat online...</span>`;
+            tasmiContainer.innerHTML = `<span class="text-slate-400 italic">Memuat rekap tasmi' online...</span>`;
             box.scrollIntoView({ behavior: 'smooth' });
 
             const now = new Date();
@@ -666,9 +674,9 @@
             }
         }
 
-        // Handler Scan dengan Proteksi Ganda (localStorage + Unique Document ID Firestore)
+        // Handler Scan dengan Validasi Online + LocalStorage Anti-Double Absen
         async function handleScanSuccess(santriId) {
-            if (window.isScanningLocked) return; // Kunci sementara cegah double kilat
+            if (window.isScanningLocked) return;
 
             const santri = window.santriData.find(s => s.id === santriId);
             const msgBox = document.getElementById('scan-result-msg');
@@ -676,24 +684,23 @@
 
             if (!santri) {
                 msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
-                msgBox.innerText = "❌ QR Code tidak dikenali / santri tidak terdaftar!";
+                msgBox.innerText = "❌ QR Code tidak dikenali / santri tidak terdaftar di server online!";
                 return;
             }
 
             if (window.scanMode === 'cepat') {
-                window.isScanningLocked = true; // Aktifkan kunci
-                const todayStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                window.isScanningLocked = true;
+                const todayStr = new Date().toISOString().split('T')[0];
                 const cacheKey = `absen_${santri.id}_${window.kegiatanAktif}_${todayStr}`;
 
                 if (localStorage.getItem(cacheKey)) {
                     msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-amber-50 text-amber-800 border border-amber-200";
                     msgBox.innerText = `⚠️ Peringatan: ${santri.nama} sudah melakukan absen untuk kegiatan "${window.kegiatanAktif}" hari ini!`;
-                    setTimeout(() => { window.isScanningLocked = false; }, 2000); // Buka kunci setelah 2 detik
+                    setTimeout(() => { window.isScanningLocked = false; }, 2000);
                     return;
                 }
 
                 try {
-                    // Buat ID Dokumen unik berbasis ID Santri + Kegiatan + Tanggal (Anti-Dobel di Database)
                     const safeKegiatan = window.kegiatanAktif.replace(/[^a-zA-Z0-9]/g, '_');
                     const uniqueDocId = `${santri.id}_${safeKegiatan}_${todayStr}`;
 
@@ -710,10 +717,10 @@
                     msgBox.innerText = `✅ Anda berhasil absen: ${santri.nama} (${window.kegiatanAktif})`;
                 } catch (e) {
                     msgBox.className = "p-3 text-center text-xs font-medium rounded-lg bg-rose-50 text-rose-700";
-                    msgBox.innerText = "❌ Gagal menyimpan absen ke database.";
+                    msgBox.innerText = "❌ Gagal menyimpan absen ke database online.";
                 }
 
-                setTimeout(() => { window.isScanningLocked = false; }, 2000); // Buka kunci setelah proses selesai
+                setTimeout(() => { window.isScanningLocked = false; }, 2000);
             } else {
                 window.scannedSantriForTahfidz = santri;
                 document.getElementById('tahfidz-santri-nama').value = santri.nama;
@@ -756,11 +763,11 @@
 
             try {
                 await addDoc(collection(db, "tahfidz_detail"), payload);
-                alert("Setoran tahfidz berhasil disimpan!");
+                alert("Setoran tahfidz berhasil disimpan ke server online!");
                 window.scannedSantriForTahfidz = null;
                 document.getElementById('tahfidz-santri-nama').value = '';
             } catch (e) {
-                alert("Gagal menyimpan ke database.");
+                alert("Gagal menyimpan setoran online.");
             }
         }
 
@@ -784,7 +791,7 @@
             window.kegiatanAktif = document.getElementById('select-kegiatan-harian').value;
             localStorage.setItem('cache_kegiatan', window.kegiatanAktif);
             renderInfoPondok();
-            alert("Kegiatan aktif berhasil diperbarui!");
+            alert("Kegiatan aktif diperbarui!");
         }
 
         window.tambahSantriBaru = async function() {
@@ -795,17 +802,19 @@
                 return;
             }
             try {
+                // Simpan langsung ke database online Firebase
                 const docRef = await addDoc(collection(db, "santri"), { nama, kelas });
                 window.santriData.push({ id: docRef.id, nama, kelas });
-                localStorage.setItem('cache_santri', JSON.stringify(window.santriData));
+                
                 populateSantriDropdown();
                 renderSantriList();
                 renderAdminSantriList();
+                
                 document.getElementById('input-nama-santri').value = '';
                 document.getElementById('input-kelas-santri').value = '';
-                alert("Santri berhasil ditambahkan!");
+                alert("Santri berhasil ditambahkan dan disimpan secara online di Firebase!");
             } catch (e) {
-                alert("Gagal menambahkan santri.");
+                alert("Gagal menambahkan santri ke server online.");
             }
         }
 
